@@ -1,0 +1,31 @@
+iwterator
+
+incorporates iw functions to gather selected Wi-Fi stats
+
+iw is copyright 2007, 2008 Johannes Berg <johannes@sipsolutions.net>
+
+
+How to compile:
+a) for local use:
+use make in src/ directory
+
+b) for OpenWrt:
+clone into package/ in openwrt buildroot
+make menuconfig
+should appear in Network -> wireless
+
+
+dependencies:
+libnl-dev
+libnl-3-dev
+libnl-genl-3-dev
+
+
+1:1 copies of iw:
+sections.c
+stations.c
+ps.c
+nl80211.h
+
+modified:
+iw.h
