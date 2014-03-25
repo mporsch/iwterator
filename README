@@ -22,10 +22,12 @@ libnl-genl-3-dev
 
 
 1:1 copies of iw:
+util.c
 sections.c
 stations.c
 ps.c
 nl80211.h
 
 modified:
+scan.c
 iw.h

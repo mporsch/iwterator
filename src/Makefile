@@ -12,7 +12,7 @@ CC ?= "gcc"
 CFLAGS ?= -O2 -g
 CFLAGS += -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs -fno-strict-aliasing -fno-common -Werror-implicit-function-declaration
 
-OBJS = iwterator.o station.o ps.o
+OBJS = iwterator.o station.o util.o scan.o ps.o
 OBJS += sections.o
 
 OBJS += $(OBJS-y) $(OBJS-Y)

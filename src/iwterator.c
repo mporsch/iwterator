@@ -130,49 +130,6 @@ static int ack_handler(struct nl_msg *msg, void *arg)
 	return NL_STOP;
 }
 
-void mac_addr_n2a(char *mac_addr, unsigned char *arg)
-{
-	int i, l;
-
-	l = 0;
-	for (i = 0; i < ETH_ALEN ; i++) {
-		if (i == 0) {
-			sprintf(mac_addr+l, "%02x", arg[i]);
-			l += 2;
-		} else {
-			sprintf(mac_addr+l, ":%02x", arg[i]);
-			l += 3;
-		}
-	}
-}
-
-int mac_addr_a2n(unsigned char *mac_addr, char *arg)
-{
-	int i;
-
-	for (i = 0; i < ETH_ALEN ; i++) {
-		int temp;
-		char *cp = strchr(arg, ':');
-		if (cp) {
-			*cp = 0;
-			cp++;
-		}
-		if (sscanf(arg, "%x", &temp) != 1)
-			return -1;
-		if (temp < 0 || temp > 255)
-			return -1;
-
-		mac_addr[i] = temp;
-		if (!cp)
-			break;
-		arg = cp;
-	}
-	if (i < ETH_ALEN - 1)
-		return -1;
-
-	return 0;
-}
-
 static int run_cmd(struct nl80211_state *state, signed long long devidx,
 		   enum id_input idby, enum command_identify_by command_idby,
 		   const struct cmd *cmd)
@@ -253,14 +210,16 @@ static int iterate_cmd(struct nl80211_state *state, signed long long devidx,
 		    !cmd->parent->name)
 			continue;
 
+		fprintf(stderr, "\ncommand: name=%s, parent=%s\n", cmd->name, cmd->parent->name);
+
 		//filter out the commands we want to be executed
 		if ((strcmp(cmd->name, "power_save") ||
 		     strcmp(cmd->parent->name, "get")) &&
 		    (strcmp(cmd->name, "dump") ||
-		     strcmp(cmd->parent->name, "station")))
+		     strcmp(cmd->parent->name, "station")) &&
+		     (strcmp(cmd->name, "dump") ||
+		     strcmp(cmd->parent->name, "scan")))
 			continue;
-
-		fprintf(stderr, "\ncommand: name=%s, parent=%s\n", cmd->name, cmd->parent->name);
 
 		ret = run_cmd(state, devidx, idby, command_idby, cmd);
 		if (ret)
