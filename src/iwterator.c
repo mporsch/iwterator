@@ -35,6 +35,7 @@ static inline int nl_socket_set_buffer_size(struct nl_sock *sk,
 }
 #endif /* CONFIG_LIBNL20 && CONFIG_LIBNL30 */
 
+int iw_debug = 0;
 
 static int nl80211_init(struct nl80211_state *state)
 {
@@ -85,7 +86,7 @@ extern struct cmd __stop___cmd;
 static void usage(void)
 {
 	printf("\nusage:\n"
-	       "  iwterator [-i<ifname>]\n\n");
+	       "  iwterator [<ifnames/phynames>]\n\n");
 }
 
 static int phy_lookup(char *name)
@@ -138,7 +139,6 @@ static int run_cmd(struct nl80211_state *state, signed long long devidx,
 	struct nl_cb *cb;
 	struct nl_cb *s_cb;
 	int err;
-	int iw_debug = 0; // TODO
 
 	msg = nlmsg_alloc();
 	if (!msg) {
@@ -199,100 +199,136 @@ static int run_cmd(struct nl80211_state *state, signed long long devidx,
 	return 2;
 }
 
-static int iterate_cmd(struct nl80211_state *state, signed long long devidx,
-		       enum id_input idby, enum command_identify_by command_idby)
+static int filter_cmd(const struct cmd *cmd,
+		      enum command_identify_by command_idby)
 {
-	int ret;
+	int i;
+	static const char * const cmd_names[] = {
+		"dump",
+		"dump",
+		"power_save",
+	};
+	static const enum nl80211_commands cmd_cmds[] = {
+			NL80211_CMD_GET_STATION,
+			NL80211_CMD_GET_SCAN,
+			NL80211_CMD_GET_POWER_SAVE,
+	};
+
+	/* not for this device type */
+	if (cmd->idby != command_idby)
+		return 1;
+
+	/* check the combination name - nl80211_command */
+	for (i = 0; i < ARRAY_SIZE(cmd_names); i++) {
+		if (strcmp(cmd_names[i], cmd->name) == 0 &&
+		    cmd_cmds[i] == cmd->cmd)
+			return 0;
+	}
+
+	return 1;
+}
+
+static int iterate_cmd(struct nl80211_state *state, signed long long devidx,
+		       enum id_input idby, enum command_identify_by command_idby,
+		       char *ifname)
+{
+	int err = 0;
 	const struct cmd *cmd;
 
 	for_each_cmd(cmd) {
-		if (!cmd->parent ||
-		    !cmd->parent->name)
+		if (filter_cmd(cmd, command_idby))
 			continue;
 
-		fprintf(stderr, "\ncommand: name=%s, parent=%s\n", cmd->name, cmd->parent->name);
+		fprintf(stderr, "\n%s %s %s\n", ifname, cmd->parent ? cmd->parent->name : "", cmd->name);
 
-		//filter out the commands we want to be executed
-		if ((strcmp(cmd->name, "power_save") ||
-		     strcmp(cmd->parent->name, "get")) &&
-		    (strcmp(cmd->name, "dump") ||
-		     strcmp(cmd->parent->name, "station")) &&
-		     (strcmp(cmd->name, "dump") ||
-		     strcmp(cmd->parent->name, "scan")))
-			continue;
-
-		ret = run_cmd(state, devidx, idby, command_idby, cmd);
-		if (ret)
-			return ret;
+		err = run_cmd(state, devidx, idby, command_idby, cmd);
+		if (err)
+			break;
 	}
 
-	return 0;
+	return err;
+}
+
+static int iterate_dev(struct nl80211_state *state,
+		       int argc, char *argv[])
+{
+	int i, idx, err = 0;
+	signed long long devidx = 0;
+	enum id_input idby = II_NONE;
+	enum command_identify_by command_idby = CIB_NONE;
+	char *tmp;
+
+	for (i = 0; i < argc; i++) {
+		/* detect interface or phy name */
+		if ((idx = if_nametoindex(argv[i])) != 0)
+			idby = II_NETDEV;
+		else if ((idx = phy_lookup(argv[i])) >= 0)
+			idby = II_PHY_NAME;
+		else
+			return 1;
+
+		switch (idby) {
+		case II_PHY_IDX:
+			command_idby = CIB_PHY;
+			devidx = strtoul(argv[i] + 4, &tmp, 0);
+			if (*tmp != '\0')
+				return 1;
+			break;
+		case II_PHY_NAME:
+			command_idby = CIB_PHY;
+			devidx = phy_lookup(argv[i]);
+			break;
+		case II_NETDEV:
+			command_idby = CIB_NETDEV;
+			devidx = if_nametoindex(argv[i]);
+			if (devidx == 0)
+				return 1;
+			break;
+		case II_WDEV:
+			command_idby = CIB_WDEV;
+			devidx = strtoll(argv[i], &tmp, 0);
+			if (*tmp != '\0')
+				return 1;
+			break;
+		default:
+			return 1;
+		}
+
+		err = iterate_cmd(state, devidx, idby, command_idby, argv[i]);
+		if (err)
+			break;
+	}
+
+	return err;
 }
 
 int main(int argc, char *argv[])
 {
 	struct nl80211_state nlstate;
 	int err;
-	signed long long devidx = 0;
-	enum id_input idby = II_NETDEV;
-	enum command_identify_by command_idby = CIB_NONE;
-	char *tmp, *ifname = "";
 
 	/* calculate command size including padding */
 	cmd_size = abs((long)&__section_set - (long)&__section_get);
 
-	if (argc == 1) {
+	/* strip off self */
+	argc--;
+	argv++;
+	/* params given? */
+	if (argc == 0) {
 		usage();
 		return 0;
 	}
-
-	for (;;) {
-		int c = getopt(argc, argv, "i:");
-		if (c < 0)
-			break;
-		switch (c) {
-		case 'i':
-			ifname = optarg;
-			break;
-		default:
-			usage();
-			return 0;
-		}
-	}
-
-	// TODO currently II_NETDEV is hardcoded
-	switch (idby) {
-	case II_PHY_IDX:
-		command_idby = CIB_PHY;
-		devidx = strtoul(ifname + 4, &tmp, 0);
-		if (*tmp != '\0')
-			return 1;
-		break;
-	case II_PHY_NAME:
-		command_idby = CIB_PHY;
-		devidx = phy_lookup(ifname);
-		break;
-	case II_NETDEV:
-		command_idby = CIB_NETDEV;
-		devidx = if_nametoindex(ifname);
-		if (devidx == 0)
-			return 1;
-		break;
-	case II_WDEV:
-		command_idby = CIB_WDEV;
-		devidx = strtoll(ifname, &tmp, 0);
-		if (*tmp != '\0')
-			return 1;
-		break;
-	default:
-		break;
+	if (strcmp(*argv, "--debug") == 0) {
+		iw_debug = 1;
+		argc--;
+		argv++;
 	}
 
 	err = nl80211_init(&nlstate);
 	if (err)
 		return 1;
 
-	err = iterate_cmd(&nlstate, devidx, idby, command_idby);
+	err = iterate_dev(&nlstate, argc, argv);
 	if (err == 1)
 		usage();
 	else if (err < 0)
