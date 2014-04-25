@@ -492,6 +492,79 @@ int handle_cmd(struct nl80211_state *state, enum id_input idby,
 	return __handle_cmd(state, idby, argc, argv, NULL);
 }
 
+int _iterate_cmd(struct nl80211_state *state, const struct cmd *cmd,
+		 int argc, char **argv)
+{
+	int err;
+
+	if (strcmp(*argv, "dev") == 0 && argc > 1) {
+		argc--;
+		argv++;
+		err = __handle_cmd(state, II_NETDEV, argc, argv, &cmd);
+	} else if (strncmp(*argv, "phy", 3) == 0 && argc > 1) {
+		if (strlen(*argv) == 3) {
+			argc--;
+			argv++;
+			err = __handle_cmd(state, II_PHY_NAME, argc, argv, &cmd);
+		} else if (*(*argv + 3) == '#')
+			err = __handle_cmd(state, II_PHY_IDX, argc, argv, &cmd);
+		else
+			goto detect;
+	} else if (strcmp(*argv, "wdev") == 0 && argc > 1) {
+		argc--;
+		argv++;
+		err = __handle_cmd(state, II_WDEV, argc, argv, &cmd);
+	} else {
+		int idx;
+		enum id_input idby = II_NONE;
+ detect:
+		if ((idx = if_nametoindex(argv[0])) != 0)
+			idby = II_NETDEV;
+		else if ((idx = phy_lookup(argv[0])) >= 0)
+			idby = II_PHY_NAME;
+		err = __handle_cmd(state, idby, argc, argv, &cmd);
+	}
+
+	return err;
+}
+
+int iterate_cmd(struct nl80211_state *state, const struct cmd *cmd)
+{
+	#define CMD_SIZE 4
+	/* currently one command consists of 4 words
+	 * pad with NULL if necessary
+	 *
+	 * below the actual line length without padding is given
+	 *
+	 * TODO get list of interfaces (e.g. wlan0, wlan1, ...) and iterate over these
+	 */
+	char *argv[] = {"list", NULL, NULL, NULL,
+			"dev", NULL, NULL, NULL,
+			"reg", "get", NULL, NULL,
+			"wlan0", "link", NULL, NULL,
+			"wlan0", "scan", NULL, NULL,
+			"wlan0", "get", "power_save", NULL,
+			"wlan0", "station", "dump", NULL,
+			};
+	int argc[] = {1, 1, 2, 2, 2, 3, 3};
+	int err = 0;
+	int i, j;
+
+	for (i = 0; i < ARRAY_SIZE(argc); i++) {
+		/* print header */
+		fprintf(stderr, "\n\niw");
+		for (j = 0; j < argc[i]; j++)
+			fprintf(stderr, " %s", *(argv + i * CMD_SIZE + j));
+		fprintf(stderr, "\n");
+
+		/* execute command */
+		err = _iterate_cmd(state, cmd, argc[i], argv + i * CMD_SIZE);
+		if (err)
+			break;
+	}
+	return err;
+}
+
 int main(int argc, char **argv)
 {
 	struct nl80211_state nlstate;
@@ -515,44 +588,11 @@ int main(int argc, char **argv)
 		return 0;
 	}
 
-	/* need to treat "help" command specially so it works w/o nl80211 */
-	if (argc == 0 || strcmp(*argv, "help") == 0) {
-		usage(argc - 1, argv + 1);
-		return 0;
-	}
-
 	err = nl80211_init(&nlstate);
 	if (err)
 		return 1;
 
-	if (strcmp(*argv, "dev") == 0 && argc > 1) {
-		argc--;
-		argv++;
-		err = __handle_cmd(&nlstate, II_NETDEV, argc, argv, &cmd);
-	} else if (strncmp(*argv, "phy", 3) == 0 && argc > 1) {
-		if (strlen(*argv) == 3) {
-			argc--;
-			argv++;
-			err = __handle_cmd(&nlstate, II_PHY_NAME, argc, argv, &cmd);
-		} else if (*(*argv + 3) == '#')
-			err = __handle_cmd(&nlstate, II_PHY_IDX, argc, argv, &cmd);
-		else
-			goto detect;
-	} else if (strcmp(*argv, "wdev") == 0 && argc > 1) {
-		argc--;
-		argv++;
-		err = __handle_cmd(&nlstate, II_WDEV, argc, argv, &cmd);
-	} else {
-		int idx;
-		enum id_input idby = II_NONE;
- detect:
-		if ((idx = if_nametoindex(argv[0])) != 0)
-			idby = II_NETDEV;
-		else if ((idx = phy_lookup(argv[0])) >= 0)
-			idby = II_PHY_NAME;
-		err = __handle_cmd(&nlstate, idby, argc, argv, &cmd);
-	}
-
+	err = iterate_cmd(&nlstate, cmd);
 	if (err == 1) {
 		if (cmd)
 			usage_cmd(cmd);
