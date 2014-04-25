@@ -26,8 +26,10 @@ util.c
 sections.c
 stations.c
 ps.c
+interface.c
 nl80211.h
+iw.h
 
 modified:
 scan.c
-iw.h
+info.c

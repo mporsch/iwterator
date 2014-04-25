@@ -1693,75 +1693,75 @@ static int handle_scan_combined(struct nl80211_state *state,
 				int argc, char **argv,
 				enum id_input id)
 {
-//	char **trig_argv;
-//	static char *dump_argv[] = {
-//		NULL,
-//		"scan",
-//		"dump",
-//		NULL,
-//	};
-//	static const __u32 cmds[] = {
-//		NL80211_CMD_NEW_SCAN_RESULTS,
-//		NL80211_CMD_SCAN_ABORTED,
-//	};
-//	int trig_argc, dump_argc, err;
-//
-//	if (argc >= 3 && !strcmp(argv[2], "-u")) {
-//		dump_argc = 4;
-//		dump_argv[3] = "-u";
-//	} else if (argc >= 3 && !strcmp(argv[2], "-b")) {
-//		dump_argc = 4;
-//		dump_argv[3] = "-b";
-//	} else
-//		dump_argc = 3;
-//
-//	trig_argc = 3 + (argc - 2) + (3 - dump_argc);
-//	trig_argv = calloc(trig_argc, sizeof(*trig_argv));
-//	if (!trig_argv)
-//		return -ENOMEM;
-//	trig_argv[0] = argv[0];
-//	trig_argv[1] = "scan";
-//	trig_argv[2] = "trigger";
-//	int i;
-//	for (i = 0; i < argc - 2 - (dump_argc - 3); i++)
-//		trig_argv[i + 3] = argv[i + 2 + (dump_argc - 3)];
-//	err = handle_cmd(state, id, trig_argc, trig_argv);
-//	free(trig_argv);
-//	if (err)
-//		return err;
-//
-//	/*
-//	 * WARNING: DO NOT COPY THIS CODE INTO YOUR APPLICATION
-//	 *
-//	 * This code has a bug, which requires creating a separate
-//	 * nl80211 socket to fix:
-//	 * It is possible for a NL80211_CMD_NEW_SCAN_RESULTS or
-//	 * NL80211_CMD_SCAN_ABORTED message to be sent by the kernel
-//	 * before (!) we listen to it, because we only start listening
-//	 * after we send our scan request.
-//	 *
-//	 * Doing it the other way around has a race condition as well,
-//	 * if you first open the events socket you may get a notification
-//	 * for a previous scan.
-//	 *
-//	 * The only proper way to fix this would be to listen to events
-//	 * before sending the command, and for the kernel to send the
-//	 * scan request along with the event, so that you can match up
-//	 * whether the scan you requested was finished or aborted (this
-//	 * may result in processing a scan that another application
-//	 * requested, but that doesn't seem to be a problem).
-//	 *
-//	 * Alas, the kernel doesn't do that (yet).
-//	 */
-//
-//	if (listen_events(state, ARRAY_SIZE(cmds), cmds) ==
-//					NL80211_CMD_SCAN_ABORTED) {
-//		printf("scan aborted!\n");
-//		return 0;
-//	}
-//
-//	dump_argv[0] = argv[0];
-//	return handle_cmd(state, id, dump_argc, dump_argv);
+	char **trig_argv;
+	static char *dump_argv[] = {
+		NULL,
+		"scan",
+		"dump",
+		NULL,
+	};
+	static const __u32 cmds[] = {
+		NL80211_CMD_NEW_SCAN_RESULTS,
+		NL80211_CMD_SCAN_ABORTED,
+	};
+	int trig_argc, dump_argc, err;
+
+	if (argc >= 3 && !strcmp(argv[2], "-u")) {
+		dump_argc = 4;
+		dump_argv[3] = "-u";
+	} else if (argc >= 3 && !strcmp(argv[2], "-b")) {
+		dump_argc = 4;
+		dump_argv[3] = "-b";
+	} else
+		dump_argc = 3;
+
+	trig_argc = 3 + (argc - 2) + (3 - dump_argc);
+	trig_argv = calloc(trig_argc, sizeof(*trig_argv));
+	if (!trig_argv)
+		return -ENOMEM;
+	trig_argv[0] = argv[0];
+	trig_argv[1] = "scan";
+	trig_argv[2] = "trigger";
+	int i;
+	for (i = 0; i < argc - 2 - (dump_argc - 3); i++)
+		trig_argv[i + 3] = argv[i + 2 + (dump_argc - 3)];
+	err = handle_cmd(state, id, trig_argc, trig_argv);
+	free(trig_argv);
+	if (err)
+		return err;
+
+	/*
+	 * WARNING: DO NOT COPY THIS CODE INTO YOUR APPLICATION
+	 *
+	 * This code has a bug, which requires creating a separate
+	 * nl80211 socket to fix:
+	 * It is possible for a NL80211_CMD_NEW_SCAN_RESULTS or
+	 * NL80211_CMD_SCAN_ABORTED message to be sent by the kernel
+	 * before (!) we listen to it, because we only start listening
+	 * after we send our scan request.
+	 *
+	 * Doing it the other way around has a race condition as well,
+	 * if you first open the events socket you may get a notification
+	 * for a previous scan.
+	 *
+	 * The only proper way to fix this would be to listen to events
+	 * before sending the command, and for the kernel to send the
+	 * scan request along with the event, so that you can match up
+	 * whether the scan you requested was finished or aborted (this
+	 * may result in processing a scan that another application
+	 * requested, but that doesn't seem to be a problem).
+	 *
+	 * Alas, the kernel doesn't do that (yet).
+	 */
+
+	if (listen_events(state, ARRAY_SIZE(cmds), cmds) ==
+					NL80211_CMD_SCAN_ABORTED) {
+		printf("scan aborted!\n");
+		return 0;
+	}
+
+	dump_argv[0] = argv[0];
+	return handle_cmd(state, id, dump_argc, dump_argv);
 }
 TOPLEVEL(scan, "[-u] [freq <freq>*] [ies <hex as 00:11:..>] [meshid <meshid>] [lowpri,flush,ap-force] [ssid <ssid>*|passive]", 0, 0,
 	 CIB_NETDEV, handle_scan_combined,
